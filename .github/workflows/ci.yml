@@ -1,1 +1,41 @@
-
+# Базовый пайплайн: сборка окружения и запуск pytest.
+name: Python CI (pytest)
+ 
+# Когда запускается пайплайн
+on:
+  push:                                   # автоматически при загрузке кода в указанные ветки
+    branches: ["main", "ai-version-1", "ai-version-2", "ai-version-3"]
+  pull_request:                           # при pull request в main
+    branches: ["main"]
+  workflow_dispatch:                      # ручной запуск кнопкой Run workflow на вкладке Actions
+ 
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest                # чистая виртуальная машина GitHub
+ 
+    steps:
+      - name: Checkout repository         # скачать код выбранной ветки
+        uses: actions/checkout@v6
+ 
+      - name: Setup Python                # установить Python 3.12 и включить кэш pip
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+ 
+      - name: Install dependencies        # установить pytest из requirements.txt
+        run: python -m pip install -r requirements.txt
+ 
+      - name: Test                        # запустить тесты, подробный вывод и отчёт JUnit
+        run: python -m pytest -v --junitxml=results.xml
+ 
+      - name: Test summary                # таблица результатов на странице запуска
+        if: ${{ always() && hashFiles('results.xml') != '' }}
+        run: python scripts/summary.py results.xml >> "$GITHUB_STEP_SUMMARY"
+ 
+      - name: Publish test results        # сохранить отчёт как артефакт даже при падении тестов
+        if: ${{ always() && hashFiles('results.xml') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: pytest-results-${{ github.ref_name }}   # имя ветки в названии, чтобы отчёты не перезаписывались
+          path: results.xml

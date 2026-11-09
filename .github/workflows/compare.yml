@@ -1,1 +1,65 @@
-
+# Сравнительный пайплайн: три ветки тестируются параллельно в одном запуске.
+name: Comparative Test Report
+ 
+on:
+  workflow_dispatch:                      # только ручной запуск
+ 
+jobs:
+  test:
+    name: Test ${{ matrix.ai }} (${{ matrix.branch }})   # три задачи: ManusAI, Deepseek, Qwen
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false                    # падение одной ветки не отменяет проверку остальных
+      matrix:
+        include:
+          - { branch: ai-version-1, ai: ManusAI }
+          - { branch: ai-version-2, ai: Deepseek }
+          - { branch: ai-version-3, ai: Qwen }
+ 
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.branch }}       # принудительно берём нужную ветку
+ 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+ 
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+ 
+      - name: Test
+        run: python -m pytest -v --junitxml=results.xml
+ 
+      - name: Test summary                # результат этой ветки на странице запуска
+        if: ${{ always() && hashFiles('results.xml') != '' }}
+        run: |
+          echo "### ${{ matrix.ai }} (${{ matrix.branch }})" >> "$GITHUB_STEP_SUMMARY"
+          python scripts/summary.py results.xml >> "$GITHUB_STEP_SUMMARY"
+ 
+      - name: Upload JUnit report         # отчёт ветки для итоговой задачи
+        if: ${{ always() && hashFiles('results.xml') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: junit-${{ matrix.branch }}
+          path: results.xml
+ 
+  report:
+    name: Combined report                 # единый отчёт по всем веткам
+    needs: test
+    if: ${{ always() }}                   # выполняется, даже если тесты в ветках упали
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6         # нужен только скрипт scripts/summary.py
+      - name: Download all reports
+        uses: actions/download-artifact@v6
+        with:
+          pattern: junit-*
+          path: results
+      - name: Build comparison table
+        run: |
+          echo "## Сравнение версий CsvRowParser" >> "$GITHUB_STEP_SUMMARY"
+          python3 scripts/summary.py results >> "$GITHUB_STEP_SUMMARY"
+ 

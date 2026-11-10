@@ -12,7 +12,9 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest                # чистая виртуальная машина GitHub
- 
+    defaults:
+      run:
+        working-directory: CsvRowParser_CI_проект
     steps:
       - name: Checkout repository         # скачать код выбранной ветки
         uses: actions/checkout@v6
